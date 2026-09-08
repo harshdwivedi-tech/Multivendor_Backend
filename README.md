@@ -250,7 +250,7 @@ The frontend application is maintained in a separate repository.
 
 **Multi-Vendor E-Commerce Frontend**
 
-[Frontend Repository](https://github.com/Priyank1922/MultiVendor_FrontEnd)
+[Frontend Repository](https://github.com/harshdwivedi-tech/Multivendor_Frontend.git)
 
 The frontend communicates with this Spring Boot backend through REST APIs and provides the user interface for customers, vendors, products, carts, and orders.
 
