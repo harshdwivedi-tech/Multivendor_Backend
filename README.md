@@ -1,70 +1,66 @@
-# Scalable Multi-Vendor E-Commerce Backend
+# Scalable Multi-Vendor E-Commerce Data Access Layer
 
-A modular **Spring Boot backend** for a multi-vendor e-commerce platform that provides REST APIs for managing customers, vendors, products, categories, shopping carts, orders, and related workflows.
+A modular **Spring Boot backend** for a multi-vendor e-commerce platform designed to manage vendors, products, categories, shopping carts, orders, and customer accounts.
 
-The project is built with a layered architecture using **Spring Data JPA and Hibernate** for persistence, with a focus on clean entity relationships, transaction management, efficient database access, and maintainable backend design.
+The project focuses on building a scalable persistence layer using **Spring Data JPA and Hibernate**, with optimized entity relationships, transaction management, soft deletes, batch processing, and efficient database queries.
+
+The backend uses **PostgreSQL** as its database and is configured for cloud deployment using **Neon PostgreSQL, Docker, and Render**.
 
 ## Features
 
-* Multi-vendor product management
-* Category management
+* Multi-vendor product and category management
 * Customer account and profile management
-* Vendor management
-* Product and category browsing
 * Shopping cart operations
 * Order and order-item management
-* RESTful API development
-* JPA and Hibernate entity relationships
-* Transaction management using Spring
+* Vendor management
+* Complex entity relationships using JPA and Hibernate
+* Soft deletion of products
+* Hibernate batch processing for bulk operations
 * Cascade operations and orphan removal
-* Efficient database queries
-* N+1 query optimization where applicable
-* Hibernate batch processing where configured
+* N+1 query optimization using JPQL `JOIN FETCH`
+* Transaction management with Spring
+* PostgreSQL database integration
+* Neon PostgreSQL cloud database support
+* Dockerized backend
+* Render deployment support
 * Unit testing with JUnit 5
 
 ## Tech Stack
 
-* **Java 17**
-* **Spring Boot**
-* **Spring Data JPA**
-* **Hibernate ORM**
-* **MySQL**
-* **HikariCP**
-* **Maven**
-* **JUnit 5**
-* **React** — Frontend
+* Java 21
+* Spring Boot
+* Spring Data JPA
+* Hibernate ORM
+* PostgreSQL
+* Neon PostgreSQL
+* HikariCP
+* Maven
+* Docker
+* Render
+* JUnit 5
 
 ## Architecture
 
 ```text
-                    REST API
-                       |
-                       v
-                 ┌───────────┐
-                 │ Controller│
-                 └─────┬─────┘
-                       |
-                       v
-                 ┌───────────┐
-                 │  Service  │
-                 └─────┬─────┘
-                       |
-                       v
-                 ┌───────────┐
-                 │ Repository│
-                 └─────┬─────┘
-                       |
-                       v
-             Spring Data JPA
-                       |
-                       v
-                   Hibernate
-                       |
-                       v
-                     MySQL
+Controller
+    |
+    v
+Service
+    |
+    v
+Repository
+    |
+    v
+Spring Data JPA / Hibernate
+    |
+    v
+PostgreSQL
+    |
+    v
+Neon PostgreSQL
 ```
 
-The application follows a layered architecture that separates API handling, business logic, data-access operations, and database persistence.
+The application follows a layered architecture that separates API handling, business logic, data access, and persistence responsibilities.
 
 ## Entity Relationships
 
@@ -105,7 +101,7 @@ Product
 Cart
 ```
 
-Products and carts are associated through a join table.
+Products and carts are connected using a join table.
 
 ### Order and OrderItem
 
@@ -113,9 +109,8 @@ Products and carts are associated through a join table.
 Order
  |
  +-- @OneToMany
-       |
-       +-- CascadeType.ALL
-       +-- orphanRemoval
+     CascadeType.ALL
+     orphanRemoval = true
        |
        v
 OrderItem
@@ -123,58 +118,56 @@ OrderItem
 
 Order items are managed as child entities of an order.
 
-## Hibernate & JPA Features
+## Hibernate Features
 
-### Entity Relationship Mapping
+### Bidirectional Entity Mapping
 
-The project uses JPA annotations to model relationships between different parts of the e-commerce domain, including:
+The project demonstrates bidirectional relationships, particularly between `Order` and `OrderItem`, using:
 
-* `@OneToOne`
 * `@OneToMany`
 * `@ManyToOne`
-* `@ManyToMany`
 * `mappedBy`
 * `CascadeType.ALL`
-* `orphanRemoval`
 
-These mappings help maintain relationships between customers, vendors, products, carts, orders, and order items.
+### Soft Delete
 
-### Transaction Management
-
-Spring's transaction management is used to maintain consistency across database operations, particularly for workflows involving multiple related entities.
-
-### Hibernate Batch Processing
-
-Hibernate JDBC batching can be configured to reduce the number of database round trips during bulk operations.
+Products are logically deleted instead of being physically removed from the database.
 
 Example:
 
-```properties
-spring.jpa.properties.hibernate.jdbc.batch_size=50
+```java
+@SQLDelete(sql = "UPDATE products SET active = false WHERE id = ?")
+@Where(clause = "active = true")
 ```
 
-Batch processing can be useful for operations involving multiple product or inventory records.
+### Batch Processing
+
+Hibernate JDBC batching is configured to improve performance during bulk operations.
+
+```properties
+hibernate.jdbc.batch_size=50
+```
 
 ### Orphan Removal
 
-Where configured, `orphanRemoval = true` allows child entities to be automatically removed when they are removed from their parent's collection.
+`orphanRemoval = true` automatically removes an `OrderItem` from the database when it is removed from its parent `Order` collection.
 
-## N+1 Query Optimization
+## N+1 Query Problem and Optimization
 
-When working with relationships between entities, careless fetching strategies can result in the **N+1 query problem**.
+### Problem
 
-For example:
+While retrieving customer orders, accessing associated order items and products individually can generate multiple SQL queries.
 
 ```text
-1 query  → Fetch orders
-N queries → Fetch associated order items
+1 query  -> Fetch orders
+N queries -> Fetch associated data
 ```
 
-This can result in unnecessary database calls when retrieving related data.
+This creates the N+1 query problem and can affect application performance as the number of orders increases.
 
-Where required, JPQL `JOIN FETCH` can be used to retrieve associated entities efficiently.
+### Solution
 
-Example:
+The project uses JPQL `JOIN FETCH` to retrieve the required associations efficiently.
 
 ```java
 SELECT o
@@ -184,7 +177,7 @@ JOIN FETCH oi.product
 WHERE o.customer.id = :customerId
 ```
 
-This allows the required associations to be retrieved together instead of triggering additional queries for each individual record.
+This reduces unnecessary database calls by retrieving the required order, order-item, and product data through an optimized query.
 
 ## Project Structure
 
@@ -209,30 +202,37 @@ src/
 
 ## Database Configuration
 
-The application uses **MySQL** as its relational database.
-
-Create the database:
-
-```sql
-CREATE DATABASE multivendor_db;
-```
-
-Then configure the database connection in `application.properties`:
+Database credentials are provided through environment variables.
 
 ```properties
-spring.application.name=Ecommerce
-
-server.port=8080
-
-spring.datasource.url=jdbc:mysql://localhost:3306/multivendor_db
-spring.datasource.username=root
-spring.datasource.password=your_password
+spring.datasource.url=${DB_URL}
+spring.datasource.username=${DB_USERNAME}
+spring.datasource.password=${DB_PASSWORD}
 
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=true
+spring.jpa.properties.hibernate.jdbc.batch_size=50
 ```
 
-> Replace `your_password` with the password configured for your MySQL user.
+### Local PostgreSQL
+
+```text
+DB_URL=jdbc:postgresql://localhost:5432/ecommerce
+DB_USERNAME=postgres
+DB_PASSWORD=your_password
+```
+
+### Neon PostgreSQL
+
+For the deployed application, PostgreSQL is hosted on Neon.
+
+```text
+DB_URL=your_neon_database_url
+DB_USERNAME=your_neon_username
+DB_PASSWORD=your_neon_password
+```
+
+Database credentials should not be committed to GitHub.
 
 ## Running the Project
 
@@ -241,22 +241,6 @@ spring.jpa.show-sql=true
 ```bash
 git clone https://github.com/Priyank1922/MultiVendor_BackEnd.git
 cd MultiVendor_BackEnd
-```
-
-### Configure MySQL
-
-Make sure MySQL is installed and running.
-
-Create the database:
-
-```sql
-CREATE DATABASE multivendor_db;
-```
-
-Update the username and password in:
-
-```text
-src/main/resources/application.properties
 ```
 
 ### Build the Project
@@ -271,46 +255,47 @@ mvn clean install
 mvn spring-boot:run
 ```
 
-The backend will start on:
-
-```text
-http://localhost:8080
-```
+The backend runs on port `8080` by default.
 
 ## Docker
 
-The backend can also be packaged as a Docker image using a multi-stage Docker build.
+Build the Docker image:
 
-Example Dockerfile:
-
-```dockerfile
-FROM maven:3.9-eclipse-temurin-17 AS build
-
-WORKDIR /build
-
-COPY pom.xml .
-COPY src ./src
-
-RUN mvn clean package -DskipTests
-
-FROM eclipse-temurin:17-jre
-
-WORKDIR /app
-
-COPY --from=build /build/target/*.jar app.jar
-
-EXPOSE 8080
-
-ENTRYPOINT ["java", "-jar", "app.jar"]
+```bash
+docker build -t multivendor-backend .
 ```
 
-The application uses **Java 17** in both the build and runtime stages.
+Run the Docker container:
 
-> When running the backend and MySQL in separate Docker containers, configure the datasource hostname to use the MySQL container/service name rather than `localhost`.
+```bash
+docker run -p 8080:8080 \
+-e DB_URL="your_database_url" \
+-e DB_USERNAME="your_database_username" \
+-e DB_PASSWORD="your_database_password" \
+multivendor-backend
+```
+
+## Deployment
+
+The backend is designed for deployment using Docker on Render with Neon PostgreSQL as the cloud database.
+
+```text
+GitHub
+   |
+   v
+Render
+   |
+   v
+Docker
+   |
+   v
+Spring Boot
+   |
+   v
+Neon PostgreSQL
+```
 
 ## Testing
-
-The project uses **JUnit 5** for automated testing.
 
 Run the test suite using:
 
@@ -318,66 +303,50 @@ Run the test suite using:
 mvn test
 ```
 
-## Frontend
+## Frontend Repository
 
-The frontend application is maintained in a separate repository.
+The frontend application is maintained separately.
 
-**Multi-Vendor E-Commerce Frontend**
+[Multi-Vendor E-Commerce Frontend](https://github.com/harshdwivedi-tech/Multivendor_Frontend.git)
 
-[Frontend Repository](https://github.com/harshdwivedi-tech/Multivendor_Frontend.git)
-
-The React frontend communicates with this Spring Boot backend through REST APIs and provides the user interface for customers and vendors.
-
-The frontend supports workflows such as:
-
-* Product discovery
-* Category browsing
-* Shopping cart management
-* Order management
-* Authentication
-* Vendor product/catalog management
+The frontend communicates with the Spring Boot backend through REST APIs.
 
 ## Key Learning Outcomes
 
-This project demonstrates practical experience with:
-
 * Spring Boot backend development
-* REST API development
-* Java 17
 * Spring Data JPA
 * Hibernate ORM
-* MySQL database integration
-* JPA entity relationship mapping
+* Complex entity relationship mapping
+* PostgreSQL database integration
+* Neon PostgreSQL
 * Transaction management
+* Soft-delete implementation
+* Hibernate batch processing
 * Cascade operations
 * Orphan removal
 * JPQL queries
 * N+1 query optimization
-* Hibernate batch processing
 * Layered backend architecture
+* REST API development
+* Docker containerization
+* Cloud deployment
+* Environment-based configuration
 * Unit testing with JUnit 5
-* Docker-based application packaging
 
 ## Project Highlights
 
-**Project Type:** Multi-Vendor E-Commerce Platform
+**Project Type:** Multi-Vendor E-Commerce Backend
+
+**Primary Focus:** Scalable persistence and data-access architecture
 
 **Backend:** Spring Boot, Spring Data JPA, Hibernate
 
-**Language:** Java 17
+**Database:** PostgreSQL, Neon PostgreSQL
 
-**Database:** MySQL
+**Optimization:** JDBC batching and N+1 query resolution
 
-**Connection Pool:** HikariCP
+**Containerization:** Docker
 
-**Build Tool:** Maven
+**Deployment:** Render
 
-**Testing:** JUnit 5
-
-**Frontend:** React
-
-**Architecture:** Layered REST API architecture
-
-**Optimization:** Efficient JPA queries, N+1 query optimization, and Hibernate batching where configured
-
-**Deployment:** Docker-ready backend
+**Frontend:** React, maintained in a separate repository
